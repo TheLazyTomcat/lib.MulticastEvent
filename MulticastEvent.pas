@@ -9,9 +9,9 @@
 {                                                                              }
 {   Multicast event handling class                                             }
 {                                                                              }
-{   ©František Milt 2014-05-07                                                 }
+{   ©František Milt 2016-03-01                                                 }
 {                                                                              }
-{   Version 1.0.2                                                              }
+{   Version 1.0.3                                                              }
 {                                                                              }
 {==============================================================================}
 unit MulticastEvent;
