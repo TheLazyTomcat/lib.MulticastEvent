@@ -16,6 +16,10 @@
 {==============================================================================}
 unit MulticastEvent;
 
+{$IFDEF FPC}
+  {$MODE ObjFPC}{$H+}
+{$ENDIF}
+
 interface
 
 uses
