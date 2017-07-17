@@ -20,6 +20,8 @@ unit MulticastEvent;
   {$MODE ObjFPC}{$H+}
 {$ENDIF}
 
+{$TYPEINFO ON}
+
 interface
 
 uses
