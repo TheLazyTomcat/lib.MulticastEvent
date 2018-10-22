@@ -9,9 +9,9 @@
 
   Multicast event handling class
 
-  ©František Milt 2016-03-01
+  ©František Milt 2018-10-22
 
-  Version 1.0.3
+  Version 1.0.4
 
   Dependencies:
     AuxTypes   - github.com/ncs-sniper/Lib.AuxTypes
@@ -25,8 +25,6 @@ unit MulticastEvent;
   {$DEFINE FPC_DisableWarns}
   {$MACRO ON}
 {$ENDIF}
-
-{$TYPEINFO ON}
 
 interface
 
@@ -71,7 +69,6 @@ type
     procedure Clear; virtual;
     procedure Call; virtual;
     property Methods[Index: Integer]: TMethod read GetMethod;
-  published
     property Owner: TObject read fOwner;
   end;
 
