@@ -7,15 +7,31 @@
 -------------------------------------------------------------------------------}
 {===============================================================================
 
-  Multicast event handling class
+  Multicast event management classes
 
-  ©František Milt 2018-10-22
+  Version 1.1 (2019-09-30)
 
-  Version 1.0.4
+  Last change 2019-09-30
+
+  ©2015-2019 František Milt
+
+  Contacts:
+    František Milt: frantisek.milt@gmail.com
+
+  Support:
+    If you find this code useful, please consider supporting its author(s) by
+    making a small donation using the following link(s):
+
+      https://www.paypal.me/FMilt
+
+  Changelog:
+    For detailed changelog and history please refer to this git repository:
+
+      github.com/TheLazyTomcat/Lib.MulticastEvent
 
   Dependencies:
-    AuxTypes   - github.com/ncs-sniper/Lib.AuxTypes
-    AuxClasses - github.com/ncs-sniper/Lib.AuxClasses
+    AuxTypes   - github.com/TheLazyTomcat/Lib.AuxTypes
+    AuxClasses - github.com/TheLazyTomcat/Lib.AuxClasses
 
 ===============================================================================}
 unit MulticastEvent;
@@ -29,7 +45,13 @@ unit MulticastEvent;
 interface
 
 uses
+  SysUtils,
   AuxClasses;
+
+type
+  EMCEException = class(Exception);
+
+  EMCEIndexOutOfBounds = class(EMCEException);
 
 {===============================================================================
 --------------------------------------------------------------------------------
@@ -38,9 +60,14 @@ uses
 ===============================================================================}
 
 type
-  TEvent = procedure of object;
+  TCallback = procedure;
+  TEvent    = procedure of object;
 
-  TMethods = array of TMethod;
+  TMulticastEntry = record
+    case IsMethod: Boolean of
+      False:  (HandlerProcedure: TProcedure);
+      True:   (HandlerMethod:    TMethod);
+  end;
 
 {===============================================================================
     TMulticastEvent - class declaration
@@ -49,9 +76,9 @@ type
   TMulticastEvent = class(TCustomListObject)
   private
     fOwner:   TObject;
-    fMethods: TMethods;
+    fEntries: array of TMulticastEntry;
     fCount:   Integer;
-    Function GetMethod(Index: Integer): TMethod;
+    Function GetEntry(Index: Integer): TMulticastEntry;
   protected
     Function GetCapacity: Integer; override;
     procedure SetCapacity(Value: Integer); override;
@@ -62,13 +89,16 @@ type
     destructor Destroy; override;
     Function LowIndex: Integer; override;
     Function HighIndex: Integer; override;
-    Function IndexOf(const Handler: TEvent): Integer; virtual;
-    Function Add(const Handler: TEvent; AllowDuplicity: Boolean = False): Integer; virtual;
-    Function Remove(const Handler: TEvent; RemoveAll: Boolean = True): Integer; virtual;
+    Function IndexOf(const Handler: TCallback): Integer; overload; virtual;
+    Function IndexOf(const Handler: TEvent): Integer; overload; virtual;
+    Function Add(const Handler: TCallback; AllowDuplicity: Boolean = False): Integer; overload; virtual;
+    Function Add(const Handler: TEvent; AllowDuplicity: Boolean = False): Integer; overload; virtual;
+    Function Remove(const Handler: TCallback; RemoveAll: Boolean = True): Integer; overload; virtual;
+    Function Remove(const Handler: TEvent; RemoveAll: Boolean = True): Integer; overload; virtual;
     procedure Delete(Index: Integer); virtual;
     procedure Clear; virtual;
-    procedure Call; virtual;
-    property Methods[Index: Integer]: TMethod read GetMethod;
+    procedure Call; overload; virtual;
+    property Entries[Index: Integer]: TMulticastEntry read GetEntry;
     property Owner: TObject read fOwner;
   end;
 
@@ -84,16 +114,16 @@ type
 
   TMulticastNotifyEvent = class(TMulticastEvent)
   public
-    Function IndexOf(const Handler: TNotifyEvent): Integer; reintroduce;
-    Function Add(const Handler: TNotifyEvent; AllowDuplicity: Boolean = False): Integer; reintroduce;
-    Function Remove(const Handler: TNotifyEvent; RemoveAll: Boolean = True): Integer; reintroduce;
+    Function IndexOf(const Handler: TNotifyCallback): Integer; reintroduce; overload;
+    Function IndexOf(const Handler: TNotifyEvent): Integer; reintroduce; overload;
+    Function Add(const Handler: TNotifyCallback; AllowDuplicity: Boolean = False): Integer; reintroduce; overload;
+    Function Add(const Handler: TNotifyEvent; AllowDuplicity: Boolean = False): Integer; reintroduce; overload;
+    Function Remove(const Handler: TNotifyCallback; RemoveAll: Boolean = True): Integer; reintroduce; overload;
+    Function Remove(const Handler: TNotifyEvent; RemoveAll: Boolean = True): Integer; reintroduce; overload;
     procedure Call(Sender: TObject); reintroduce;
   end;
 
 implementation
-
-uses
-  SysUtils;
 
 {$IFDEF FPC_DisableWarns}
   {$DEFINE FPCDWM}
@@ -114,12 +144,12 @@ uses
     TMulticastEvent - private methods
 -------------------------------------------------------------------------------}
 
-Function TMulticastEvent.GetMethod(Index: Integer): TMethod;
+Function TMulticastEvent.GetEntry(Index: Integer): TMulticastEntry;
 begin
 If CheckIndex(Index) then
-  Result := fMethods[Index]
+  Result := fEntries[Index]
 else
-  raise Exception.CreateFmt('TMulticastEvent.GetMethod: Index (%d) out of bounds.',[Index]);
+  raise EMCEIndexOutOfBounds.CreateFmt('TMulticastEvent.GetEntry: Index (%d) out of bounds.',[Index]);
 end;
 
 {-------------------------------------------------------------------------------
@@ -128,18 +158,18 @@ end;
 
 Function TMulticastEvent.GetCapacity: Integer;
 begin
-Result := Length(fMethods);
+Result := Length(fEntries);
 end;
 
 //------------------------------------------------------------------------------
 
 procedure TMulticastEvent.SetCapacity(Value: Integer);
 begin
-If Value <> Length(fMethods) then
+If Value <> Length(fEntries) then
   begin
-    If Value < Length(fMethods) then
+    If Value < Length(fEntries) then
       fCount := Value;
-    SetLength(fMethods,Value);
+    SetLength(fEntries,Value);
   end;
 end;
 
@@ -167,7 +197,7 @@ constructor TMulticastEvent.Create(Owner: TObject = nil);
 begin
 inherited Create;
 fOwner := Owner;
-SetLength(fMethods,0);
+SetLength(fEntries,0);
 fCount := 0;
 // adjust growing, no need for fast growth
 GrowMode := gmLinear;
@@ -186,7 +216,7 @@ end;
 
 Function TMulticastEvent.LowIndex: Integer;
 begin
-Result := Low(fMethods);
+Result := Low(fEntries);
 end;
 
 //------------------------------------------------------------------------------
@@ -198,21 +228,57 @@ end;
 
 //------------------------------------------------------------------------------
 
+Function TMulticastEvent.IndexOf(const Handler: TCallback): Integer;
+var
+  i:  Integer;
+begin
+Result := -1;
+For i := LowIndex to HighIndex do
+  If not fEntries[i].IsMethod then
+    If @fEntries[i].HandlerProcedure = @Handler then
+      begin
+        Result := i;
+        Break{For i};
+      end;
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 Function TMulticastEvent.IndexOf(const Handler: TEvent): Integer;
 var
   i:  Integer;
 begin
 Result := -1;
 For i := LowIndex to HighIndex do
-  If (fMethods[i].Code = TMethod(Handler).Code) and
-     (fMethods[i].Data = TMethod(Handler).Data) then
-    begin
-      Result := i;
-      Break{For i};
-    end
+  If fEntries[i].IsMethod then
+    If (fEntries[i].HandlerMethod.Code = TMethod(Handler).Code) and
+       (fEntries[i].HandlerMethod.Data = TMethod(Handler).Data) then
+      begin
+        Result := i;
+        Break{For i};
+      end;
 end;
 
 //------------------------------------------------------------------------------
+
+Function TMulticastEvent.Add(const Handler: TCallback; AllowDuplicity: Boolean = False): Integer;
+begin
+If Assigned(Handler) then
+  begin
+    Result := IndexOf(Handler);
+    If (Result < 0) or AllowDuplicity then
+      begin
+        Grow;
+        Result := fCount;
+        fEntries[Result].IsMethod := False;
+        fEntries[Result].HandlerProcedure := TProcedure(Handler);
+        Inc(fCount);
+      end;
+  end
+else Result := -1;
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 Function TMulticastEvent.Add(const Handler: TEvent; AllowDuplicity: Boolean = False): Integer;
 begin
@@ -223,7 +289,8 @@ If Assigned(TMethod(Handler).Code) and Assigned(TMethod(Handler).Data) then
       begin
         Grow;
         Result := fCount;
-        fMethods[Result] := TMethod(Handler);
+        fEntries[Result].IsMethod := True;
+        fEntries[Result].HandlerMethod := TMethod(Handler);
         Inc(fCount);
       end;
   end
@@ -231,6 +298,17 @@ else Result := -1;
 end;
 
 //------------------------------------------------------------------------------
+
+Function TMulticastEvent.Remove(const Handler: TCallback; RemoveAll: Boolean = True): Integer;
+begin
+repeat
+  Result := IndexOf(Handler);
+  If Result >= 0 then
+    Delete(Result);
+until not RemoveAll or (Result < 0);
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 Function TMulticastEvent.Remove(const Handler: TEvent; RemoveAll: Boolean = True): Integer;
 begin
@@ -250,11 +328,11 @@ begin
 If CheckIndex(Index) then
   begin
     For i := Index to Pred(HighIndex) do
-      fMethods[i] := fMethods[i + 1];
+      fEntries[i] := fEntries[i + 1];
     Dec(fCount);
     Shrink;
   end
-else raise Exception.CreateFmt('TMulticastEvent.Delete: Index (%d) out of bounds.',[Index]);
+else raise EMCEIndexOutOfBounds.CreateFmt('TMulticastEvent.Delete: Index (%d) out of bounds.',[Index]);
 end;
 
 //------------------------------------------------------------------------------
@@ -272,7 +350,10 @@ var
   i:  Integer;
 begin
 For i := LowIndex to HighIndex do
-  TEvent(fMethods[i]);
+  If fEntries[i].IsMethod then
+    TEvent(fEntries[i].HandlerMethod)
+  else
+    TCallback(fEntries[i].HandlerProcedure);
 end;
 
 
@@ -290,6 +371,13 @@ end;
     TMulticastNotifyEvent - public methods
 -------------------------------------------------------------------------------}
 
+Function TMulticastNotifyEvent.IndexOf(const Handler: TNotifyCallback): Integer;
+begin
+Result := inherited IndexOf(TCallback(Handler));
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 Function TMulticastNotifyEvent.IndexOf(const Handler: TNotifyEvent): Integer;
 begin
 Result := inherited IndexOf(TEvent(Handler));
@@ -297,12 +385,26 @@ end;
 
 //------------------------------------------------------------------------------
 
+Function TMulticastNotifyEvent.Add(const Handler: TNotifyCallback; AllowDuplicity: Boolean = False): Integer;
+begin
+Result := inherited Add(TCallback(Handler),AllowDuplicity);
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
 Function TMulticastNotifyEvent.Add(const Handler: TNotifyEvent; AllowDuplicity: Boolean = False): Integer;
 begin
 Result := inherited Add(TEvent(Handler),AllowDuplicity);
 end;
 
 //------------------------------------------------------------------------------
+
+Function TMulticastNotifyEvent.Remove(const Handler: TNotifyCallback; RemoveAll: Boolean = True): Integer;
+begin
+Result := inherited Remove(TCallback(Handler),RemoveAll);
+end;
+
+// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 Function TMulticastNotifyEvent.Remove(const Handler: TNotifyEvent; RemoveAll: Boolean = True): Integer;
 begin
@@ -316,7 +418,10 @@ var
   i:  Integer;
 begin
 For i := LowIndex to HighIndex do
-  TNotifyEvent(Methods[i])(Sender);
+  If fEntries[i].IsMethod then
+    TNotifyEvent(fEntries[i].HandlerMethod)(Sender)
+  else
+    TNotifyCallback(fEntries[i].HandlerProcedure)(Sender);
 end;
 
 end.
