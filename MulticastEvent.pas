@@ -11,9 +11,9 @@
 
   Version 1.1 (2019-09-30)
 
-  Last change 2019-09-30
+  Last change 2020-08-02
 
-  ©2015-2019 František Milt
+  ©2015-2020 František Milt
 
   Contacts:
     František Milt: frantisek.milt@gmail.com
@@ -37,10 +37,11 @@
 unit MulticastEvent;
 
 {$IFDEF FPC}
-  {$MODE ObjFPC}{$H+}
+  {$MODE ObjFPC}
   {$DEFINE FPC_DisableWarns}
   {$MACRO ON}
 {$ENDIF}
+{$H+}
 
 interface
 
