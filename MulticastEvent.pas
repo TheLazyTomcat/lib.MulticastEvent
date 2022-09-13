@@ -11,9 +11,9 @@
 
   Version 1.1 (2019-09-30)
 
-  Last change 2020-08-02
+  Last change 2022-09-13
 
-  ©2015-2020 František Milt
+  ©2015-2022 František Milt
 
   Contacts:
     František Milt: frantisek.milt@gmail.com
@@ -59,7 +59,6 @@ type
                                 TMulticastEvent                                
 --------------------------------------------------------------------------------
 ===============================================================================}
-
 type
   TCallback = procedure;
   TEvent    = procedure of object;
@@ -73,14 +72,13 @@ type
 {===============================================================================
     TMulticastEvent - class declaration
 ===============================================================================}
-
+type
   TMulticastEvent = class(TCustomListObject)
-  private
+  protected
     fOwner:   TObject;
     fEntries: array of TMulticastEntry;
     fCount:   Integer;
-    Function GetEntry(Index: Integer): TMulticastEntry;
-  protected
+    Function GetEntry(Index: Integer): TMulticastEntry; virtual;
     Function GetCapacity: Integer; override;
     procedure SetCapacity(Value: Integer); override;
     Function GetCount: Integer; override;
@@ -108,11 +106,10 @@ type
                              TMulticastNotifyEvent                                                             
 --------------------------------------------------------------------------------
 ===============================================================================}
-
 {===============================================================================
     TMulticastNotifyEvent - class declaration
 ===============================================================================}
-
+type
   TMulticastNotifyEvent = class(TMulticastEvent)
   public
     Function IndexOf(const Handler: TNotifyCallback): Integer; reintroduce; overload;
@@ -136,13 +133,11 @@ implementation
                                 TMulticastEvent                                
 --------------------------------------------------------------------------------
 ===============================================================================}
-
 {===============================================================================
     TMulticastEvent - class implementation
 ===============================================================================}
-
 {-------------------------------------------------------------------------------
-    TMulticastEvent - private methods
+    TMulticastEvent - protected methods
 -------------------------------------------------------------------------------}
 
 Function TMulticastEvent.GetEntry(Index: Integer): TMulticastEntry;
@@ -153,9 +148,7 @@ else
   raise EMCEIndexOutOfBounds.CreateFmt('TMulticastEvent.GetEntry: Index (%d) out of bounds.',[Index]);
 end;
 
-{-------------------------------------------------------------------------------
-    TMulticastEvent - protected methods
--------------------------------------------------------------------------------}
+//------------------------------------------------------------------------------
 
 Function TMulticastEvent.GetCapacity: Integer;
 begin
@@ -363,11 +356,9 @@ end;
                              TMulticastNotifyEvent                                                             
 --------------------------------------------------------------------------------
 ===============================================================================}
-
 {===============================================================================
     TMulticastNotifyEvent - class implementation
-===============================================================================}
-
+===============================================================================}  
 {-------------------------------------------------------------------------------
     TMulticastNotifyEvent - public methods
 -------------------------------------------------------------------------------}
